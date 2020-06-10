@@ -1,0 +1,1433 @@
+---
+title: 'Visualizacion de datos: PEC2-PEC3-PEC4 - Exploración peace agreements'
+author: "Autor: Begoña Martínez Arribas"
+date: "Abril-Mayo-Junio 2020"
+output:
+  html_document:
+    df_print: kable
+    fig_width: 6.5
+    highlight: tango
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 4
+  word_document: 
+    df_print: kable
+    toc: yes
+    toc_depth: 3
+  pdf_document:
+    fig_caption: yes
+    fig_height: 4
+    fig_width: 5
+    highlight: tango
+    toc: yes
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+******
+## Descripción 
+
+En esta práctica se va a tratar el dataset de peaceagreements.org sobre el que se analizarán sus atributos. Para ello se llevará a cabo un análisis exploratorio de los datos, de tal forma que se pueda conocer atributos del dataset, tipos, valores, etc.
+
+### Preparación entorno 
+
+```{r echo=FALSE,warning=FALSE,error=FALSE,message=FALSE}
+load.libraries <- c('data.table', 'testthat', 'gridExtra', 'corrplot', 'ggplot2', 'dplyr','plyr', 'readxl', 'tidyr', 'gapminder', 'spData', 'RColorBrewer', 'rworldmap', 'factoextra', 'FactoMineR', 'psych', 'fpc', 'scales')
+install.lib <- load.libraries[!load.libraries %in% installed.packages()]
+for(libs in install.lib) install.packages(libs, dependences = TRUE)
+sapply(load.libraries, require, character = TRUE)
+```
+
+### Integración del juego de datos y revisión características atributos 
+
+En primer lugar realizamos la carga del dataset descargado en excel y se visualiza una muestra de algunos registros.
+
+```{r echo=FALSE,warning=FALSE,error=FALSE,message=FALSE}
+setwd("/Users/begomartinez")
+agreem<-read_excel("pax_all_agreements_data.xlsx")
+head(agreem)
+```
+
+Se puede apreciar que contiene distintos tipos de atributos, vamos a ver su dimensión:
+
+```{r echo=FALSE,warning=FALSE,error=FALSE,message=FALSE}
+dim(agreem)
+```
+
+En total existen 1832 acuerdos con un total de 265 atributos. Exploramos la estructura de estos: 
+
+```{r echo=FALSE,warning=FALSE,error=FALSE,message=FALSE}
+str(agreem)
+```
+
+Como ya se vio anteriormente se aprecia que existen variables de diferentes tipos, entre estos podemos ver variables:
+
+- Cualitativas de tipo nominal como podría ser: country, conflict type, peace process name, region.
+- Cuantitativas de tipo discreto como: agreement length (pages), agreement length (characters). 
+- Cualitativas de tipo ordinal como: children/youth, stage que incluyen valores de 0 a 3 conforme al grado que se da el atributo.
+- Cualitativo de tipo binario o dicotómico como: Rhetorical, Anti-discrimination, woman, family (todos los atributos) que toman 1 en caso de estar el atributo en cuestión incluido en el acuerdo o 0 si no lo están.
+Las variables binarias se pasaran a factor para explorar la relación y graficarla.
+
+Si visualizamos las características de los atributos:
+
+```{r echo=FALSE,warning=FALSE,error=FALSE,message=FALSE}
+summary(agreem)
+```
+
+Tras estudiar los campos del dataset vamos a pasar a analizar algunos atributos y la relación entre ellos.
+
+### Limpieza de datos
+#### Missing Values y outliers
+
+En primer lugar, se realiza la preparación de los datos que se van a tratar para que estos estén lo más limpios posible de cara a trabajar con ellos a lo largo de esta práctica.
+
+Se extraen las estadísticas de los valores vacíos.
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+colSums(is.na(agreem))
+```
+
+Se puede ver que existen varios atributos que contienen valores vacíos como son:
+Tipos de acuerdo:
+-Loc2ISO: localización ISO para uno de los países del acuerdo, 1598 vacíos. Hay muchos acuerdos Intra por lo que es lógico.
+-Loc2GWNO: localización Gleditsch-Ward, 1598 vacíos. Hay muchos acuerdos Intra por lo que es lógico.
+-PamAgr: acuerdos que están bajo acuerdos Pam, hay 1479 que no tienen valor en este atributo
+-UcdpAgr: acuerdos que incluyen Ucdp program, vacíos 1230.
+-Part: partes que directamente firman los acuerdos, 17 vacíos. Algunos acuerdos no son firmados.
+-ThrdPart: acuerdos donde participan terceros, con 887 vacíos. Muchos acuerdos no participan terceras partes.
+-CowWar: número de guerra, 443 vacíos ya que en muchos de los acuerdos que derivan de procesos de guerra no está registrado.
+- OthAgr: 872, existen muchos acuerdos en categoría otros
+- UcdpCon(29 vacíos), Loc1ISO(38 vacíos), Loc1GWNO(14 vacíos), StageSub (23 vacíos).
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+colSums(agreem=="")
+```
+
+Se aprecia que hay varios campos con valores nulos.
+
+Se revisa el total de valores unicos por variable, se aprecian las variables ordinales y las binarias
+```{r warning=FALSE,error=FALSE,message=FALSE}
+apply(agreem,2, function(x) length(unique(x)))
+```
+
+Se revisa la frecuencia de algunos atributos que nos puedan interesar.
+
+```{r}
+agreemb<-agreem 
+```
+
+
+```{r}
+agreem3<-agreemb %>% 
+  group_by(Con) %>%
+  tally()
+```
+
+```{r}
+boxplot(agreem3$n)
+```
+
+Vemos que hay países que tienen muchos acuerdos.
+
+```{r}
+mean(agreem3$n)
+```
+
+```{r}
+agreem4<-agreemb %>% 
+           group_by(Con) %>%
+           tally() %>%
+          top_n(10)
+```
+
+Se aprecian los 3 países que superan en mucho el número de acuerdos.
+
+
+```{r}
+ggplot(agreem4,aes(x=Con,y=n)) + geom_bar(colour='black',fill='#809900',stat='identity') +theme(axis.text.x  = element_text(angle=45, hjust = 1)) + labs(title="Top 10 países", 
+       x="País")
+```
+Los países con mayor número de acuerdos son: Yugoslavia, Colombia, Filipinas y Siria.
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+table(agreem$Reg)
+```
+
+```{r}
+gr1 <- ggplot(agreem, aes(x = Reg)) + geom_bar(width=0.5, colour="blue", fill="blue")
+gr1 + xlab("Region") + ylab ("Número de acuerdos") + 
+  ggtitle("Acuerdos por Region") +theme(axis.text.x  = element_text(angle=45, hjust = 1)) 
+```
+
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+table(agreem$Contp)
+```
+Se aprecia un valor atípico categorizado en Otros para el tipo de conflicto.
+
+```{r}
+gr2 <- ggplot(agreem, aes(x = Contp)) + geom_bar(width=0.5, colour="blue", fill="blue")
+gr2 + xlab("Tipo conflicto") + ylab ("Número de acuerdos") + 
+  ggtitle("Acuerdos por tipo de conflicto") + theme_bw()
+```
+
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+table(agreem$Status)
+```
+
+
+```{r}
+Stat = data.frame(table(agreem$Status))
+Stat$percent = paste0(Stat$Freq,"(",round((Stat$Freq/sum(Stat$Freq))*100,1),"%)")
+
+ggplot(Stat, aes(x="", y = Freq, fill = Var1)) +
+  geom_bar(width = 2, stat = 'identity') +
+  coord_polar("y", direction = -1) +
+  theme_void()+
+  geom_text(aes(label = percent),
+            position = position_stack(vjust=0.035)) +
+  scale_fill_discrete(name="Status")
+```
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+table(agreem$Stage)
+```
+Se aprecia de nuevo valor atípico en la categoría otros.
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+gr3.a <- ggplot(agreem, aes(Stage)) + 
+  geom_bar(aes(Stage, (..count..)/sum(..count..)), width=0.5, fill="blue") 
+
+gr3.a + scale_y_continuous(labels=percent) + xlab(NULL) + 
+  ylab("% de acuerdos") + ggtitle("Distribución por etapas del acuerdo") +  theme_bw()
+```
+
+Más de la cuarta parte de los acuerdos están en etapa de pre negociación
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+table(agreem$StageSub)
+```
+
+En este caso se precia una categoría con un solo caso que es el Reoth.
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+gr3.a <- ggplot(agreem, aes(StageSub)) + 
+  geom_bar(aes(StageSub, (..count..)/sum(..count..)), width=0.5, fill="blue") 
+
+gr3.a + scale_y_continuous(labels=percent) + xlab(NULL) + 
+  ylab("% de acuerdos") + ggtitle("Distribución por etapas del acuerdo") +theme(axis.text.x  = element_text(angle=45, hjust = 1))
+```
+En cuanto a subetapas los volumenes mayores son multiss y ceas, es decir con varios items abiertos y cese del fuego.
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+table(agreem$Agtp)
+```
+
+```{r}
+Agtpp = data.frame(table(agreem$Agtp))
+Agtpp$percent = paste0(Agtpp$Freq,"(",round((Agtpp$Freq/sum(Agtpp$Freq))*100,1),"%)")
+
+ggplot(Agtpp, aes(x="", y = Freq, fill = Var1)) +
+  geom_bar(width = 1, stat = 'identity') +
+  coord_polar("y", direction = -1) +
+  theme_void()+
+  geom_text(aes(label = percent),
+            position = position_stack(vjust=0.5)) +
+  scale_fill_discrete(name="Agtp")
+```
+La distribución a nivel global por tipo de conflicto se concentra significativamente en los Intra, con conflictos internos.
+
+```{r}
+agreemf<-agreem$Dat
+```
+
+```{r}
+fecha<-agreem$Dat
+fecha<-as.Date(fecha)
+```
+
+```{r}
+mon <- as.numeric(format(fecha,'%m'))
+yr <- as.numeric(format(fecha,'%Y'))
+monyr<-as.factor(paste(mon,yr,sep="/"))
+agreem_fecha<-data_frame(yr)
+```
+```{r}
+class(agreem_fecha$yr)
+```
+
+```{r}
+gr4 <- ggplot(agreem_fecha, aes(x =yr)) + geom_bar(width=0.5, colour="blue", fill="blue")
+gr4 + xlab("Fechas") + ylab ("Número de acuerdos") +theme(axis.text.x  = element_text(angle=45, hjust = 1)) + labs(title="Fecha firma acuerdos",x="Fecha")
+```
+
+Acumulando por años los valores que alcanzaron un mayor número de acueros fue en el 1993-1994, después este descendió para volver a subir en 1999 y de nuevo caer subiendo de nuevo ne 2006,2008 y una última subida con altibajos en 2014.
+
+```{r}
+boxplot(agreem$Lgt)
+```
+
+Con el boxplot se aprecian valores atípicos, vamos a eximanarlo un poco más.
+
+```{r}
+mean(agreem$Lgt)
+```
+
+```{r}
+agreemlgt<-agreem
+agreemlgt$Lgt <- cut(agreemlgt$Lgt, breaks=c(1,7,15,25,200,Inf), labels=c('hasta7','hasta15','hasta25','hasta50','mayor200'))
+table(agreemlgt$Lgt)
+```
+
+```{r}
+table(agreem$ImSrc)
+```
+Se esperaba obtener todos los textos de los acuerdos en la base de datos pero hay uno aún sin guardar, entendemos que se trata de una anomalía.
+
+### Análisis relaciones atributos
+
+Debido a la enorme cantidad de atributos que tiene el dataset se va reducir su dimensionalidad para poder explorar la relación entre algunos de estos atributos.
+
+```{r}
+agreema<-agreem[,c("Con","Contp","PP",	"PPName",	"Reg",	"AgtId",	"Agt",	"Dat",	"Status",	"Lgt",	"Agtp",	"Stage",	"StageSub",	"Part",	"GCh",	"GDis",	"GAge",	"GMig",	"GRa",	"GRe",	"GInd",	"GRef",	"GSoc",	"GeWom", "GeFa", "EqGen",	"GeMe",	"GeLgbti",	"GeLgbtiPos",	"StDef",	"StInd",	"StUni",	"Pol",	"PolNewInd",	"Cons",	"Ele",	"Polps",	"Terps",	"Eps",	"Mps", 	"HrGen",	"CprLife",	"CprTort",	"CprEq",	"CprVote",	"HrSec",	"SerWork",	"SerHeal",	"SerEdu",	"JusCr",	"JusPri",	"Dev",	"DevSoc",	"DevHum",	"DevInfra",	"NatRes",	"Tax",	"SsrGua",	"Cor",	"SsrCrOcr",	"SsrDrugs",	"Terr",	"TjGen",	"TjVet",	"TjVic",	"ImUN",	"ImPK",	"ImSrc")]
+```
+
+```{r}
+dim(agreema)
+```
+
+```{r}
+ggplot(agreema) + aes(x=Reg) + 
+  geom_histogram(aes(fill=factor(GCh)), alpha=1,stat="count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title="Region e Infancia", 
+       x="Region",
+       fill="Infancia")
+```
+
+Se aprecia que la region con mayor volumen de acuerdos para infancia es Africa y despues Asia y Pacifico.
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+ggplot(agreema) + aes(x=yr) + 
+  geom_histogram(aes(fill=factor(GCh)), alpha=1,stat="count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title="Años e Infancia", 
+       x="Años",
+       fill="Infancia")
+```
+
+El mayor volumen de acuerdos que incluyen infancia se da durante de forma intermitente en 1994, 1999, 2006 y 2008 y a partir de 2013 empiezan a crecer hasta 2016 que decaen.
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+ggplot(agreema) + aes(x=yr) + 
+  geom_histogram(aes(fill=factor(GeWom)), alpha=1,stat="count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title="Años y Mujer", 
+       x="Años",
+       fill="Mujer")
+```
+
+Para la mujer el mayor volumen se da en 2006, 2008 y a partir de 2013 hasta 2016, coincidiendo con infancia. 
+
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+ggplot(agreema) + aes(x=Status) + 
+  geom_histogram(aes(fill=factor(GCh)), alpha=1,stat="count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title="Estado e infancia", 
+       x="Estado",
+       fill="Infancia")
+```
+
+Por estado los acuerdos que consideran referencias a la infancia son aquellos en los que participan varias partes en el acuerdo.
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+ggplot(agreema) + aes(x=Stage) + 
+  geom_histogram(aes(fill=factor(GCh)), alpha=1,stat="count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title="Etapa e infancia", 
+       x="Etapa",
+       fill="Infancia")
+```
+
+En cuanto a la etapa en la que se encuentran los acuerdos con referencias a la infancia, el mayor volumen están en etapa 'SubPar', no resueltos todos los temas del conflicto pero sí tenidos en cuenta para futuros acuerdos. 
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+ggplot(agreema) + aes(x=Dev) + 
+  geom_histogram(aes(fill=factor(GCh)), alpha=1,stat="count") +
+  labs(title="Desarrollo e infancia", 
+       x="Desarrollo",
+       fill="Infancia")
+```
+
+Se aprecia que existe mayor volumen de acuerdos que consideran referencias a la infancia que a su vez incluyen referencias al desarrollo.
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+ggplot(agreema) + aes(x=Agtp) + 
+  geom_histogram(aes(fill=factor(GCh)), alpha=1,stat="count") +
+  labs(title="Tipo de conflicto e infancia", 
+       x="Tipo de conflicto",
+       fill="Infancia")
+```
+
+Por tipo de conflicto el mayor volumen de acuerdos que consideran medidas de infancia son los internos, Intra, dentro de un mismo estado.
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+ggplot(agreema) + aes(x=factor(GeWom)) + 
+  geom_histogram(aes(fill=factor(GCh)), alpha=1,stat="count") +
+  labs(title="Mujer e infancia", 
+       x="Mujer",
+       fill="Infancia")
+```
+
+Para aquellos acuerdos que consideran referencias a la infancia también incluyen referencias a la mujer.
+Vamos a ver que características tienen los acuerdos con referencias a la mujer
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+ggplot(agreema) + aes(x=Reg) + 
+  geom_histogram(aes(fill=factor(GeWom)), alpha=1,stat="count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title="Region y Mujer", 
+       x="Region",
+       fill="Mujer")
+```
+
+La region que tiene más acuerdos con referencias a la mujer es Africa, después Asia y la que menos Cross-regional.
+
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+ggplot(agreema) + aes(x=Status) + 
+  geom_histogram(aes(fill=factor(GeWom)), alpha=1,stat="count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title="Estado y Mujer", 
+       x="Estado",
+       fill="Mujer")
+```
+
+Por estado los acuerdos que consideran referencias a la mujer son aquellos en los que participan varias partes en el acuerdo.
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+ggplot(agreema) + aes(x=Stage) + 
+  geom_histogram(aes(fill=factor(GeWom)), alpha=1,stat="count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title="Etapa y Mujer", 
+       x="Etapa",
+       fill="Mujer")
+```
+
+En cuanto a la etapa en la que se encuentran los acuerdos con referencias a la infancia, el mayor volumen están en etapa 'SubPar', no resueltos todos los temas del conflicto pero sí tenidos en cuenta para futuros acuerdos. 
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+ggplot(agreema) + aes(x=Dev) + 
+  geom_histogram(aes(fill=factor(GeWom)), alpha=1,stat="count") +
+  labs(title="Desarrollo y Mujer", 
+       x="Desarrollo",
+       fill="Mujer")
+```
+
+Se aprecia que existe volumen de acuerdos que consideran referencias a la mujer que a su vez incluyen referencias al desarrollo.
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+ggplot(agreema) + aes(x=Agtp) + 
+  geom_histogram(aes(fill=factor(GeWom)), alpha=1,stat="count") +
+  labs(title="Tipo de conflicto y Mujer", 
+       x="Tipo de conflicto",
+       fill="Mujer")
+```
+
+Los tipos de conflicto que incluyen a la mujer son Intra, dentro del estado.
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+ggplot(agreema) + aes(x=factor(HrGen)) + 
+  geom_histogram(aes(fill=factor(GeWom)), alpha=1,stat="count") +
+  labs(title="Derechos humanos y Mujer", 
+       x="Derechos humanos",
+       fill="Mujer")
+```
+
+Para los acuerdos que contemplan derechos humanos también incluyen referencias a las mujeres.
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+ggplot(agreema) + aes(x=factor(PolNewInd)) + 
+  geom_histogram(aes(fill=factor(GeWom)), alpha=1,stat="count") +
+  labs(title="Nuevas instituciones y Mujer", 
+       x="Nuevas instituciones",
+       fill="Mujer")
+```
+
+En cuanto a nuevas instituciones se aprecia que el volumen de acuerdos que incluye referencias a la mujer también lo incluye para nuevas instituciones. 
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+ggplot(agreema) + aes(x=factor(Contp)) + 
+  geom_histogram(aes(fill=factor(GeWom)), alpha=1,stat="count") +
+  labs(title="Tipo de conflicto acuerdo y Mujer", 
+       x="Tipo de conclicto acuerdo",
+       fill="Mujer")
+```
+
+En cuanto al tipo de conflicto los acuerdos con referencias a la mujer incluyen tipo de conflicto de gobierno y gobierno/territorio.
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+ggplot(agreema) + aes(x=factor(GeFa)) + 
+  geom_histogram(aes(fill=factor(GeWom)), alpha=1,stat="count") +
+  labs(title="Familia y Mujer", 
+       x="Familia",
+       fill="Mujer")
+```
+
+Más de la mitad de los acuerdos que incluyen referencias a la mujer también lo hacen a la familia.
+
+Si seleccionamos solo los acuerdos que contemplan a la mujer:
+```{r}
+agreemx <- agreema %>% filter(GeWom>0)
+```
+
+
+```{r}
+agreem7<-agreemx %>% 
+           group_by(Con) %>%
+           tally() %>%
+          top_n(10)
+```
+
+
+```{r}
+ggplot(agreem7,aes(x=Con,y=n)) + geom_bar(colour='black',fill='#809900',stat='identity') +theme(axis.text.x  = element_text(angle=45, hjust = 1)) + labs(title="Top 10 países mujer", 
+       x="País")
+```
+Los países con acuerdos que incluyen más referencias a la mujer son: Colombia, South Sudan, Central African Republic, Nepal y Afghanistan.
+
+Haciendo lo mismo para infancia:
+
+```{r}
+agreemy <- agreema %>% filter(GCh>0)
+```
+
+
+```{r}
+agreem8<-agreemy %>% 
+           group_by(Con) %>%
+           tally() %>%
+          top_n(10)
+```
+
+
+```{r}
+ggplot(agreem8,aes(x=Con,y=n)) + geom_bar(colour='black',fill='#809900',stat='identity') +theme(axis.text.x  = element_text(angle=45, hjust = 1)) + labs(title="Top 10 países infancia", 
+       x="País")
+```
+Los países que mas acuerdos incluyen para infancia son: South Susan, Colombia, Central African Republic y Congo.
+
+A continuación trasnformamos a factor y numérico alguna variables de cara a estudiar su correlación a partir de las gráficas visualizadas.
+
+```{r}
+for(i in 1:ncol(agreem)) {
+  if (is.character(agreem[,i])){
+    agreem[,i] <- as.factor(agreem[,i])
+  }
+}
+```
+
+```{r}
+# pasamos a numéricos algunos factor
+
+agreem$Contpn <- as.numeric(factor(agreem$Contp, 
+                                  levels = c("Government", "Government/territory", "Inter-group", "Territory", "Other"),
+                                  labels = c(4,3,2,1,0) ,ordered = TRUE))
+agreem$Agtpn <- as.numeric(factor(agreem$Agtp, 
+                                  levels = c("Intra", "IntraLocal", "InterIntra", "Inter"),
+                                  labels = c(4,3,2,1) ,ordered = TRUE))
+agreem$Statusn <- as.numeric(factor(agreem$Status, 
+                                  levels = c("Multiparty signed/agreed", "Unilateral document", "Status unclear", "Agreement with subsequent status"),
+                                  labels = c(4,3,2,1) ,ordered = TRUE))
+agreem$Stagen <- as.numeric(factor(agreem$Stage, 
+                                  levels = c("Pre", "SubPar", "Cea", "Imp", "Subcomp", "Ren", "Other"),
+                                  labels = c(6,5,4,3,2,1,0) ,ordered = TRUE))
+
+```
+
+
+
+### Matriz de correlación entre variables
+
+Vamos a realizar el análisis de correlacción, para aquellas variables que en el análisis previo se ha visto tienen una relación con mujer e infancia:
+
+```{r}
+correl<-c("GCh",	"GSoc",	"GeWom", 	"PolNewInd",	"Cons",	"Polps", 	 "HrDem",	"ProtGrp",  "CprLife",	"CprVote",	 "CprLib", 	"SerWork",	"SerHeal",	"SerEdu", "SerSs", 	"JusCrSp", 	"Dev", "TjVic")
+heat<-agreem[,correl]
+```
+
+```{r}
+options(repr.plot.width=20, repr.plot.height=20)
+qplot(x=Var1, y=Var2, data=melt(cor(heat, use="p")), fill=value, geom="tile") +
+   scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+   name="Correlacion entre variables") +
+   theme_minimal()+ 
+   theme(axis.text.x = element_text(angle = 45, vjust = 1, size = 7, hjust = 1))+
+   coord_fixed()+
+   ggtitle("Mapa de Calor/Correlación") +
+   theme(plot.title = element_text(hjust = 0.4))
+```
+
+Se observa correlación entre todas las variables consideradas, confirmándose la hipótesis y exploración llevada a cabo.
+
+###  PCA 
+
+Con el fin de reducir la dimension,  vamos a llevar a cabo un estudio de análisis de componentes principales o PCA, en sus siglas en inglés. 
+PCA se trata de una transformación lineal k-dimensional del espacio paramétrico a un espacio n-dimensional.
+
+```{r}
+res.pca <- PCA(heat,  graph = FALSE)
+```
+
+Visualizamos el porcentage de variación de la información que somos capaces de explicar con los diferentes componentes principales:
+
+```{r}
+fviz_screeplot(res.pca, addlabels = TRUE, ylim = c(0, 40))
+```
+
+Con los primeros tres componentes PC1 y PC2 se explica el 50% de la varianza.
+
+Se visualizan las variables de estos 3 primeros componentes.
+
+```{r}
+var <- get_pca_var(res.pca)
+# Contribucion PC1
+fviz_contrib(res.pca, choice = "var", axes = 1, top = 10)
+# Contribucion PC2
+fviz_contrib(res.pca, choice = "var", axes = 2, top = 10)
+# Contribucion PC3
+fviz_contrib(res.pca, choice = "var", axes = 3, top = 10)
+fviz_pca_var(res.pca, col.var="contrib",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE # Avoid text overlapping)
+             ) + theme_minimal() + ggtitle("Variables - PCA")
+
+```
+
+
+En el biplot de los dos componentes principales más importantes podemos observar que variables contribuyen más a formar cada uno de ellos.
+
+Para el PC1, se aprecia que la variables principales son SerHeal, SerEdu, SerWork, CprLife, CprLib, SerSs y CprVote, es decir derechos relacionados con educación, trabajo, sanidad, vida, voto, libertad y seguridad.
+
+Para el PC2, las variables son SerSs, SerHeal, SerEdu, SerWork, GeWom, Polps, PolNewInd y Dev, aquí ya se incluyen variables de política y económicas.
+
+En PC3 se observa que destacan Polps, Cons, PolNewInd, GCh, TjVic y GeWom, variables políticas y de justicia con mujer e infancia.
+
+Si visualizamos algunas de estas:
+
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+corrmatrix <- cor(agreem[, c('SerHeal', 'SerEdu', 'SerWork', 'CprLife', 'CprLib', 'SerSs', 'GeWom', 'CprEq', 'GCh', 'CprSlav', 'GSoc', 'ProtGrp', 'ProtLgl')])
+                            
+corrplot(corrmatrix, method= 'number')
+```
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+corrmatrix2 <- cor(agreem[, c( 'GeWom', 'Polps', 'GCh', 'Cons', 'Pol', 'Dev', 'NEC', 'HrDem', 'CitRights', 'JusCrSp', 'NEC', 'LaRefMan', 'HrGen', 'TjVic' )])
+pairs.panels(corrmatrix2)
+```
+
+Se aprecia que los % más elevados de correlación se dan entre:
+- Derecho a la educación y a la sanidad.
+- Derecho a la educación y trabajo.
+- Derecho a la vida y al trabajo, sanidad y educación.
+- Derecho a la seguridad y a la educación, sanidad y trabajo.
+- Derecho a la libertad y a la vida.
+- Mujer e infancia.
+- Poder compartido y reformas constitucionales.
+- Infancia y derecho a la vida, a la educación, a la libertad.
+- Mujer y reformas constitucionales, derecho a la libertad, educación.
+- Protección a grupos y a derechos.
+- Desarrollo y democracia.
+
+
+
+### EDA - Hipotesis PEC3
+
+Se va a crear un dataset solo con aquellos acuerdos que contienen a la vez referencias a la mujer y a la infancia
+
+```{r}
+agreemtot1 <- agreem %>% filter(GCh>0 & GeWom>0)
+```
+
+
+En total de los 1832 acuerdos solo 225 tienen en cuanta a la vez disposiciones para la mujer e infancia, es decir solo el 12% de los acuerdos de paz contemplan disposiciones para ambos colectivos.
+Para mujer hay 363 acuerdos, un 20%, que incluyen este colectivo y para infancia 310 acuerdos, 17%.
+
+```{r}
+agreem9<-agreemtot1 %>% 
+           group_by(Con) %>%
+           tally() %>%
+          top_n(10)
+```
+
+```{r}
+ggplot(agreem9,aes(x=Con,y=n)) + geom_bar(colour='black',fill='#809900',stat='identity') +theme(axis.text.x  = element_text(angle=45, hjust = 1)) + labs(title="Top 10 países mujer e infancia", 
+       x="País")
+```
+
+Los países que más acuerdos tienen que consideran a la vez mujer e infancia son:
+-South Sudan
+-Colombia
+-Central African Republic
+-Democratic Republic of Congo
+-Burundi
+
+```{r}
+fecham<-agreemtot1$Dat
+fecham<-as.Date(fecham)
+```
+
+```{r}
+monm <- as.numeric(format(fecham,'%m'))
+yrm <- as.numeric(format(fecham,'%Y'))
+monyrm<-as.factor(paste(monm,yrm,sep="/"))
+agreem_fecham<-data_frame(yrm)
+```
+
+```{r}
+gryr <- ggplot(agreem_fecham, aes(x =yrm)) + geom_bar(width=0.5, colour="blue", fill="blue")
+gryr + xlab("Fechas") + ylab ("Número de acuerdos mujer e infancia") +theme(axis.text.x  = element_text(angle=45, hjust = 1)) + labs(title="Fecha firma acuerdos mujer e infancia",x="Fecha")
+```
+
+Aunque desde 1990 existen acuerdos que incluyen mujer e infancia y aumentan en 1993 con altibajos sucesivos, se aprecia que el mayor volumen de acuerdos que incluyen mujer e infancia se encuentra en los años 2015 y 2016 para después decrecer notablemente.
+
+```{r}
+agreemnom <- agreem %>% filter(GCh==0 & GeWom==0)
+```
+En total de los 1832 acuerdos 1384 no consideran disposiciones para la mujer e infancia, es decir el 88% de los acuerdos de paz.
+
+Creamos un dataset con los países que no incluyen acuerdos ni de mujer ni de infancia
+```{r}
+agreemno<-anti_join(agreemnom, agreemtot1, by = "Con")  
+```
+
+Países que no incluyen acuerdos de mujer e infancia
+
+
+```{r}
+agreem99<-agreemno %>% 
+           group_by(Con) %>%
+           tally() %>%
+          top_n(10)
+```
+```{r}
+dim(agreemno)
+```
+
+```{r}
+ggplot(agreem99,aes(x=Con,y=n)) + geom_bar(colour='black',fill='#809900',stat='identity') +theme(axis.text.x  = element_text(angle=45, hjust = 1)) + labs(title="Top 10 países no incluyen nunca mujer e infancia", 
+       x="País")
+```
+
+Países que no incluyen ningún acuerdo con referencia ni a mujer ni a infancia:
+
+- Georgia/Abkhazia
+- Kosovo/Serbia/Yugoslavia
+- Indonesia-Aceh
+- Armenia/Azerbajian/Nagorno-Karabakn
+- Mozambique
+
+
+Vamos a analizar las distribuciones y relaciones del dataset filtrado para los acuerdos que incluyen mujer e infancia para algunas variables que se ha visto de forma separada que se relacionan:
+
+```{r}
+agreemtot<-agreemtot1[,c("Con","Contp","PP",	"PPName",	"Reg",	"AgtId",	"Agt",	"Dat",	"Status",	"Lgt",	"Agtp",	"Stage",	"StageSub",	"Part",	"GCh",	"GDis",	"GAge",	"GMig",	"GRa",	"GRe",	"GInd",	"GRef",	"GSoc",	"GeWom", "GeFa", "EqGen",	"GeMe",	"GeLgbti",	"GeLgbtiPos",	"StDef",	"StInd",	"StUni",	"Pol", "HrDem",	"PolNewInd",	"Cons",	"Ele",	"Polps",	"Terps",	"Eps",	"Mps", 	"HrGen",	"CprLife",	"CprTort",	"CprEq",	"CprVote",	"HrSec",	"SerWork",	"SerHeal",	"SerEdu",	"JusCr",	"JusPri",	"Dev",	"DevSoc",	"DevHum",	"DevInfra",	"NatRes",	"Tax",	"SsrGua",	"Cor",	"LaRefMan", "NEC",	"TjGen",	"TjVet",	"TjVic", "ProtGrp", "ProtLgl", "CprLib", "CprSlav", "CitRights", "SerSs", "JusCrSp")]
+```
+
+
+Vemos la distribución por región:
+
+```{r}
+gr11 <- ggplot(agreemtot, aes(x = Reg)) + geom_bar(width=0.5, colour="blue", fill="blue")
+gr11 + xlab("Region") + ylab ("Número de acuerdos") + 
+  ggtitle("Acuerdos mujer e infancia por Region") +theme(axis.text.x  = element_text(angle=45, hjust = 1)) 
+```
+
+La region que más acuerdos tiene que incluyen a mujer e infancia es Africa con mucha diferencia, que tiene 3 o 4 veces más que el resto de regiones, si bien es cierto es la región que más acuerdos tiene a nivel general, la diferencia en volumen por el total no estan elevada como por mujer e infancia. 
+
+Vemos la distribución por tipo de conflicto:
+```{r}
+gr22 <- ggplot(agreemtot, aes(x = Contp)) + geom_bar(width=0.5, colour="blue", fill="blue")
+gr22 + xlab("Tipo conflicto") + ylab ("Número de acuerdos") + 
+  ggtitle("Acuerdos mujer e infancia por tipo de conflicto") + theme_bw()
+```
+
+Se mantiene el conflicto de gobierno como el mayoritario seguido de gobierno/territorio
+
+A continuación revisamos la distribución por estado:
+
+```{r}
+gr33 <- ggplot(agreemtot, aes(x = Status)) + geom_bar(width=0.5, colour="blue", fill="blue")
+gr33 + xlab("Estado") + ylab ("Número de acuerdos") + 
+  ggtitle("Acuerdos mujer e infancia por estado") + theme_bw()
+```
+
+El 90% de los acuerdos que incluyen mujer e infancia son multiparty, es decir, participan varias partes en el acuerdo.
+
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+gr3.a <- ggplot(agreemtot, aes(Stage)) + 
+  geom_bar(aes(Stage, (..count..)/sum(..count..)), width=0.5, fill="blue") 
+
+gr3.a + scale_y_continuous(labels=percent) + xlab(NULL) + 
+  ylab("% de acuerdos") + ggtitle("Distribución por etapas del acuerdo mujer e infancia") +  theme_bw()
+```
+
+En la distribución por etapas la mayoría se encuentra en etapa SubPar, es decir con temas pendientes de consolidar, es decir ha superado la etapa de prenegociación que se deba cuando tratamos el dataset completo para todos los acuerdos.
+
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+gr3.a <- ggplot(agreemtot, aes(StageSub)) + 
+  geom_bar(aes(StageSub, (..count..)/sum(..count..)), width=0.5, fill="blue") 
+
+gr3.a + scale_y_continuous(labels=percent) + xlab(NULL) + 
+  ylab("% de acuerdos") + ggtitle("Distribución por sub-etapas del acuerdo mujer e infancia") +theme(axis.text.x  = element_text(angle=45, hjust = 1))
+```
+
+En la distribución por subetapas se aprecia que el valor mayoritario sigue siendo MultIss.
+
+Para el tipo de acuerdo:
+```{r}
+Agtpp = data.frame(table(agreemtot$Agtp))
+Agtpp$percent = paste0(Agtpp$Freq,"(",round((Agtpp$Freq/sum(Agtpp$Freq))*100,1),"%)")
+
+ggplot(Agtpp, aes(x="", y = Freq, fill = Var1)) +
+  geom_bar(width = 1, stat = 'identity') +
+  coord_polar("y", direction = -1) +
+  theme_void()+
+  geom_text(aes(label = percent),
+            position = position_stack(vjust=0.5)) +
+  scale_fill_discrete(name="Agtp")
+```
+
+
+Solo existen 3 tipos, no se da en acuerdos de tipo Inter ambas inclusiones a la vez, mujer e infancia y la mayoría se trara de acuerdos Intra, internos, seguidos de los locales y en menor medidad los internos con participación inter.
+
+
+Se analizan las relaciones de los atributos considerados que correlacionan con mujer e infancia bien directamente, bien porque correlacionan entre ellos y alguno de estos a su vez con mujer o infancia.
+
+Variables sociales:
+
+```{r}
+GSocc = data.frame(table(agreemtot$GSoc))
+GSocc$percent = paste0(GSocc$Freq,"(",round((GSocc$Freq/sum(GSocc$Freq))*100,1),"%)")
+
+ggplot(GSocc, aes(x="", y = Freq, fill = Var1)) +
+  geom_bar(width = 1, stat = 'identity') +
+  coord_polar("y", direction = -1) +
+  theme_void()+
+  geom_text(aes(label = percent),
+            position = position_stack(vjust=0.5)) +
+  scale_fill_discrete(name="GSoc")
+```
+
+
+Para la variable por clase social no llega al 20% de acuerdos que lo incluyen a la vez que mujer e infancia, si bien el procentaje a nivel general de inclusión es del 4% para esta variable.
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+grdev <- ggplot(agreemtot, aes(GeFa)) + 
+  geom_bar(aes(GSoc, (..count..)/sum(..count..)), width=0.5, fill="blue") 
+grdev + scale_y_continuous(labels=percent) + xlab(NULL) + 
+  ylab("% de acuerdos") + ggtitle("Distribución por familia y mujer e infancia") 
+```
+
+Si bien la mayoría de acuerdos no incluye referencias a familia, para mujer e infancia lo hace en un 20%, con el total de acuerdos el 95% no lo incluyen.
+
+
+Variables de Gobierno:
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+library(scales) 
+grdev <- ggplot(agreemtot, aes(Pol)) + 
+  geom_bar(aes(Dev, (..count..)/sum(..count..)), width=0.5, fill="blue") 
+grdev + scale_y_continuous(labels=percent) + xlab(NULL) + 
+  ylab("% de acuerdos") + ggtitle("Distribución por instituciones políticas  y mujer e infancia") 
+```
+
+De nuevo es casi el 75% de los acuerdos que incluyen mujer e infancia que también incluyen instituciones políticas en estos acuerdos.
+
+```{r}
+Conss = data.frame(table(agreemtot$Cons))
+Conss$percent = paste0(Conss$Freq,"(",round((Conss$Freq/sum(Conss$Freq))*100,1),"%)")
+
+ggplot(Conss, aes(x="", y = Freq, fill = Var1)) +
+  geom_bar(width = 1, stat = 'identity') +
+  coord_polar("y", direction = -1) +
+  theme_void()+
+  geom_text(aes(label = percent),
+            position = position_stack(vjust=0.5)) +
+  scale_fill_discrete(name="Cons")
+```
+
+
+En cuanto a reformas constitución casi el 40% de los acuerdos las incluyen para mujer e infancia
+
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+grdev <- ggplot(agreemtot, aes(factor(PolNewInd))) + 
+  geom_bar(aes(factor(PolNewInd), (..count..)/sum(..count..)), width=0.5, fill="light blue") 
+grdev + scale_y_continuous(labels=percent) + xlab(NULL) + 
+  ylab("% de acuerdos") + ggtitle("Distribución por nuevas instituciones políticas  y mujer e infancia") 
+```
+
+Se aprecia que solo el 20% incluyen nuevas instituciones políticas, si bien sobre el total este procentaje es del 4%
+
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+grdev <- ggplot(agreemtot, aes(factor(Polps))) + 
+  geom_bar(aes(factor(Polps), (..count..)/sum(..count..)), width=0.5, fill='#709990') 
+grdev + scale_y_continuous(labels=percent) + xlab(NULL) + 
+  ylab("% de acuerdos") + ggtitle("Distribución por reparto de poder  y mujer e infancia") 
+```
+
+Casi el 40% de los acuerdos que incluyen mujer e infancia también incluyen reparto de poder, lo que significa que va muy alineado.
+
+
+
+Variables de desarrollo:
+
+```{r}
+Devv = data.frame(table(agreemtot$Dev))
+Devv$percent = paste0(Devv$Freq,"(",round((Devv$Freq/sum(Devv$Freq))*100,1),"%)")
+
+ggplot(Devv, aes(x="", y = Freq, fill = Var1)) +
+  geom_bar(width = 1, stat = 'identity') +
+  coord_polar("y", direction = -1) +
+  theme_void()+
+  geom_text(aes(label = percent),
+            position = position_stack(vjust=0.5)) +
+  scale_fill_discrete(name="Dev")
+```
+ 
+
+Se observa que el 40% de acuerdos que incluyen mujer e infancia también incluyen menciones al desarrollo y además el 15% incluyen disposiciones y casi el 20% implementaciones de desarrollo dentro del acuerdo, es decir casi el 75% de los acuerdos que tratan mujer e infancia incluyen disposiciones para el desarrollo. 
+ 
+ 
+```{r warning=FALSE,error=FALSE,message=FALSE}
+grdev <- ggplot(agreemtot, aes(factor(LaRefMan))) + 
+  geom_bar(aes(factor(LaRefMan), (..count..)/sum(..count..)), width=0.5, fill='#709990') 
+grdev + scale_y_continuous(labels=percent) + xlab(NULL) + 
+  ylab("% de acuerdos") + ggtitle("Distribución por distribución de la propiedad  y mujer e infancia") 
+```
+ 
+Casi llegan al 30% los acuerdos para mujer e infancia que tienen en cuenta disposiciones para la distribución de la propiedad. 
+
+ 
+```{r warning=FALSE,error=FALSE,message=FALSE}
+grdev <- ggplot(agreemtot, aes(factor(NEC))) + 
+  geom_bar(aes(factor(NEC), (..count..)/sum(..count..)), width=0.5, fill='light blue') 
+grdev + scale_y_continuous(labels=percent) + xlab(NULL) + 
+  ylab("% de acuerdos") + ggtitle("Inclusion plan económico nacional y mujer e infancia") 
+```
+ 
+Solo el 20% de los acuerdos para mujer e infancia incluyen reformas en el plan económico nacional. Encualquier caso supera a lo incluido por total acuerdos donde la inclusión estaba solo para un 4%.
+
+
+Variables derechos:
+
+```{r}
+EqGenn = data.frame(table(agreemtot$EqGen))
+EqGenn$percent = paste0(EqGenn$Freq,"(",round((EqGenn$Freq/sum(EqGenn$Freq))*100,1),"%)")
+
+ggplot(EqGenn, aes(x="", y = Freq, fill = Var1)) +
+  geom_bar(width = 1, stat = 'identity') +
+  coord_polar("y", direction = -1) +
+  theme_void()+
+  geom_text(aes(label = percent),
+            position = position_stack(vjust=0.5)) +
+  scale_fill_discrete(name="Dev")
+```
+
+
+Prácticamente la mitad de los acuerdos que incluyen mujer e infancia incluyen derechos de igualdad como era de esperar.
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+grdev <- ggplot(agreemtot, aes(factor(HrGen))) + 
+  geom_bar(aes(factor(HrGen), (..count..)/sum(..count..)), width=0.5, fill='light blue') 
+grdev + scale_y_continuous(labels=percent) + xlab(NULL) + 
+  ylab("% de acuerdos") + ggtitle("Derechos humanos y mujer e infancia") 
+```
+El 70% de los acuerdos que incluyen mujer e infancia incluyen disposiciones sobre los derechos humanos.
+
+```{r}
+HrDemm = data.frame(table(agreemtot$HrDem))
+HrDemm$percent = paste0(HrDemm$Freq,"(",round((HrDemm$Freq/sum(HrDemm$Freq))*100,1),"%)")
+
+ggplot(HrDemm, aes(x="", y = Freq, fill = Var1)) +
+  geom_bar(width = 1, stat = 'identity') +
+  coord_polar("y", direction = -1) +
+  theme_void()+
+  geom_text(aes(label = percent),
+            position = position_stack(vjust=0.5)) +
+  scale_fill_discrete(name="Dev")
+```
+
+
+Igualmente la mitad de los acuerdos que incluyen mujer e infancia incluyen derechos democráticos como era de esperar.
+
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+grdev <- ggplot(agreemtot, aes(factor(ProtGrp))) + 
+  geom_bar(aes(factor(ProtGrp), (..count..)/sum(..count..)), width=0.5, fill='light blue') 
+grdev + scale_y_continuous(labels=percent) + xlab(NULL) + 
+  ylab("% de acuerdos") + ggtitle("Protección derechos grupales y mujer e infancia") 
+```
+
+El 30% de acuerdos de mujer e infancia incluyen protección a derechos de grupo.
+
+```{r warning=FALSE,error=FALSE,message=FALSE}
+grdev <- ggplot(agreemtot, aes(factor(ProtLgl))) + 
+  geom_bar(aes(factor(ProtLgl), (..count..)/sum(..count..)), width=0.5, fill='blue') 
+grdev + scale_y_continuous(labels=percent) + xlab(NULL) + 
+  ylab("% de acuerdos") + ggtitle("Protección derechos legales y mujer e infancia") 
+```
+
+El 25% de acuerdos de mujer e infancia incluyen protección a derechos legales.
+
+Si analizamos los derechos civiles:
+
+```{r}
+agreemderc<-agreemtot[,c("CprLife", "CprEq", "CprSlav", "CprLib", "CprVote", "CitRights")]
+```
+
+```{r}
+for(i in 1:ncol(agreemderc)){
+  par(mfrow=c(2,2))
+  barplot(table(agreemderc[,i]), 
+        main="Distribución derechos civiles",
+        col=c('blue','pink'), density = 35,
+        ylab="Frecuencia", xlab=colnames(agreemderc[i])) 
+}
+```
+
+Podemos observar que los derechos que más se incluyen en los acuerdos que tratan mujer e infancia son el derecho a la vida, a la libertad, al voto y derechos de los ciudadanos.
+
+Pasamos ahora a revisar los derechos socioeconómicos:
+
+```{r}
+agreemdere<-agreemtot[,c("SerWork", "SerHeal", "SerEdu", "SerSs")]
+```
+
+```{r}
+for(i in 1:ncol(agreemdere)){
+ par(mfrow=c(2,2))
+  pie(table(agreemdere[,i]), 
+    main="Distribución por derechos humanos", 
+    col=c('blue','pink','lightblue','purple', 'grey','orange'), density = 35,
+    ylab="Frecuencia", xlab=colnames(agreemdere[i])) 
+# otra representación con tantos por ciento
+# piepercent <- round(prop.table(table(agreemdere[,i])*100,2))
+#  pie(table(agreemdere[,i]), 
+#    main="Distribución por derechos socioeconómicos", 
+#    col=c('blue','pink'), density = 35,
+#    labels=piepercent)
+#  legend("topright", c("1","0"), cex=0.8, fill=c(2,4)) 
+}
+```
+  
+Se aprecia que los derechos al trabajo y la educación están presentes en mayor medida en los acuerdos que incluyen disposiciones de mujer e infancia.
+
+```{r}
+grdev <- ggplot(agreemtot, aes(factor(JusCrSp))) + 
+  geom_bar(aes(factor(JusCrSp), (..count..)/sum(..count..)), width=0.5, fill='pink') 
+grdev + scale_y_continuous(labels=percent) + xlab(NULL) + 
+  ylab("% de acuerdos") + ggtitle("Justicia y mujer e infancia") 
+```
+
+```{r}
+barplot(table(agreemtot$TjVic), 
+        main="Distribución referencias a victimas",
+        col=c('blue','pink', 'grey', 'red'), density = 35,
+        ylab="Frecuencia", xlab=colnames(agreemtot$TjVic)) 
+```
+
+Se aprecia que el 50% de los acuerdos de mujer e infancia incluyen referencias a víctimas.
+
+### Visualización geográfica - Mapas
+
+
+```{r}
+library(maps)
+library(ggplot2)
+world_data <- ggplot2::map_data('world')
+world_data <- fortify(world_data)
+```
+
+
+```{r}
+agreemmap <- joinCountryData2Map(agreem, 
+                                  joinCode = "ISO3",
+                                  nameJoinColumn = "Loc1ISO")
+```
+
+Distribución por tipo de conflicto
+
+```{r}
+ # def. map parameters, e.g. def. colors
+mapParams <- mapCountryData(agreemmap, 
+                            nameColumnToPlot="Contp",
+                            oceanCol = "azure2",
+                            catMethod = "categorical",
+                            missingCountryCol = gray(.8),
+                            colourPalette = c("coral",
+                                              "coral2",
+                                              "coral3", "orangered", 
+                                              "orangered3", "orangered4"),
+                            addLegend = F,
+                            mapTitle = "",
+                            border = NA)
+# add legend and display map
+do.call(addMapLegendBoxes, c(mapParams,
+                             x = 'bottom',
+                             title = "Tipo de Conflicto",
+                             horiz = TRUE,
+                             bg = "transparent",
+                             bty = "n"))
+  
+```        
+Distribución por estapas
+
+```{r}
+ # def. map parameters, e.g. def. colors
+mapParams <- mapCountryData(agreemmap, 
+                            nameColumnToPlot="Stage",
+                            oceanCol = "azure2",
+                            catMethod = "categorical",
+                            missingCountryCol = gray(.8),
+                            colourPalette = c("coral",
+                                              "coral2",
+                                              "coral3", "orangered", 
+                                              "orangered3", "orangered4"),
+                            addLegend = F,
+                            mapTitle = "",
+                            border = NA)
+# add legend and display map
+do.call(addMapLegendBoxes, c(mapParams,
+                             x = 'bottom',
+                             title = "Etapa",
+                             horiz = TRUE,
+                             bg = "transparent",
+                             bty = "n"))
+  
+```        
+Distribución por estado
+
+```{r}
+ # def. map parameters, e.g. def. colors
+mapParams <- mapCountryData(agreemmap, 
+                            nameColumnToPlot="Status",
+                            oceanCol = "azure2",
+                            catMethod = "categorical",
+                            missingCountryCol = gray(.8),
+                            colourPalette = c("coral",
+                                              "coral2",
+                                              "coral3", "orangered", 
+                                              "orangered3", "orangered4"),
+                            addLegend = F,
+                            mapTitle = "",
+                            border = NA)
+# add legend and display map
+do.call(addMapLegendBoxes, c(mapParams,
+                             x = 'bottom',
+                             title = "Estado",
+                             horiz = TRUE,
+                             bg = "transparent",
+                             bty = "n"))
+  
+
+```
+
+Distribución por infancia
+
+```{r}
+ # def. map parameters, e.g. def. colors
+mapParams <- mapCountryData(agreemmap, 
+                            nameColumnToPlot="GCh",
+                            oceanCol = "azure2",
+                            catMethod = "categorical",
+                            missingCountryCol = gray(.8),
+                            colourPalette = c("coral",
+                                              "coral2",
+                                              "coral3", "orangered", 
+                                              "orangered3", "orangered4"),
+                            addLegend = F,
+                            mapTitle = "",
+                            border = NA)
+# add legend and display map
+do.call(addMapLegendBoxes, c(mapParams,
+                             x = 'bottom',
+                             title = "Infancia",
+                             horiz = TRUE,
+                             bg = "transparent",
+                             bty = "n"))
+  
+```        
+
+Distribución por mujer
+
+```{r}
+ # def. map parameters, e.g. def. colors
+mapParams <- mapCountryData(agreemmap, 
+                            nameColumnToPlot="GeWom",
+                            oceanCol = "azure2",
+                            catMethod = "categorical",
+                            missingCountryCol = gray(.8),
+                            colourPalette = c("coral",
+                                              "coral2",
+                                              "coral3", "orangered", 
+                                              "orangered3", "orangered4"),
+                            addLegend = F,
+                            mapTitle = "",
+                            border = NA)
+# add legend and display map
+do.call(addMapLegendBoxes, c(mapParams,
+                             x = 'bottom',
+                             title = "Mujer",
+                             horiz = TRUE,
+                             bg = "transparent",
+                             bty = "n"))
+  
+```        
+
+Distribución por poder compartido
+
+```{r}
+ # def. map parameters, e.g. def. colors
+mapParams <- mapCountryData(agreemmap, 
+                            nameColumnToPlot="Polps",
+                            oceanCol = "azure2",
+                            catMethod = "categorical",
+                            missingCountryCol = gray(.8),
+                            colourPalette = c("coral",
+                                              "coral2",
+                                              "coral3", "orangered", 
+                                              "orangered3", "orangered4"),
+                            addLegend = F,
+                            mapTitle = "",
+                            border = NA)
+# add legend and display map
+do.call(addMapLegendBoxes, c(mapParams,
+                             x = 'bottom',
+                             title = "Power sharing",
+                             horiz = TRUE,
+                             bg = "transparent",
+                             bty = "n"))
+  
+```        
+Distribución por desarrollo
+
+```{r}
+ # def. map parameters, e.g. def. colors
+mapParams <- mapCountryData(agreemmap, 
+                            nameColumnToPlot="Dev",
+                            oceanCol = "azure2",
+                            catMethod = "categorical",
+                            missingCountryCol = gray(.8),
+                            colourPalette = c("coral",
+                                              "coral2",
+                                              "coral3", "orangered", 
+                                              "orangered3", "orangered4"),
+                            addLegend = F,
+                            mapTitle = "",
+                            border = NA)
+# add legend and display map
+do.call(addMapLegendBoxes, c(mapParams,
+                             x = 'bottom',
+                             title = "Power sharing",
+                             horiz = TRUE,
+                             bg = "transparent",
+                             bty = "n"))
+  
+```        
+Distribución por igualdad de género
+
+```{r}
+ # def. map parameters, e.g. def. colors
+mapParams <- mapCountryData(agreemmap, 
+                            nameColumnToPlot="EqGen",
+                            oceanCol = "azure2",
+                            catMethod = "categorical",
+                            missingCountryCol = gray(.8),
+                            colourPalette = c("coral",
+                                              "coral2",
+                                              "coral3", "orangered", 
+                                              "orangered3", "orangered4"),
+                            addLegend = F,
+                            mapTitle = "",
+                            border = NA)
+# add legend and display map
+do.call(addMapLegendBoxes, c(mapParams,
+                             x = 'bottom',
+                             title = "Power sharing",
+                             horiz = TRUE,
+                             bg = "transparent",
+                             bty = "n"))
+  
+```        
+Seleccionamos los atributos con los que nos quedaremos tras la explorción para la hipótesis que contaremos a través de una historia de Tableau
+
+```{r}
+agreemt<-agreem[,c("Con","Contp", "PP",	"PPName",	"Reg",	"Dat",	"AgtId", "Part", "Loc1ISO", "Loc2ISO", "Status",	"Agtp",	"Stage",	"StageSub",	"GCh",	"GSoc",	"GeWom", "GeFa", "EqGen",	"GeMe",		"Pol", "HrDem",	"PolNewInd",	"Cons",		"Polps",	"HrGen",	"CprLife",	"CprEq",	"CprVote", "SerWork",	"SerHeal",	"SerEdu",	"JusCr",	"JusPri",	"Dev","LaRefMan", "NEC",	"TjVic", "ProtGrp", "ProtLgl", "CprLib", "CprSlav", "CitRights", "SerSs", "JusCrSp")]
+```
+
+Desglosamos por único país, para la extracción del dataset de entrada a Tableau.
+
+```{r}
+agreemt2<-agreemt %>%
+  unnest(strsplit(agreemt$Con, "/"))
+```
+
+Escribimos el dataset que utilizaremos para la historia a crear en Tableau:
+
+```{r echo=FALSE,warning=FALSE,error=FALSE,message=FALSE}
+write.csv2(agreemt2,file="Agreemt2.csv",row.names = FALSE)
+```
+
+
+
+### Análisis de los resultados y conclusiones.
+
+Extraemos las conclusiones derivadas del análsis exploratorio de las variables y sus relaciones vinculado al dataset de peace agreements:
+
+Características del dataset:
+1. Existen variables cualitativas, ordinales, binarias y cuantitativas discretas.
+
+2. Analizando los acuerdos en base a sus características básicas podemos indicar que:
+
+   - Existen valores de atributos en algunos acuerdos vacíos: 
+          - Loc2ISO: localización ISO para uno de los países del acuerdo, 1598 vacíos. Hay muchos acuerdos Intra por lo que es lógico.
+          - Loc2GWNO: localización Gleditsch-Ward, 1598 vacíos. Hay muchos acuerdos Intra por lo que es lógico.
+          - PamAgr: acuerdos que están bajo acuerdos Pam, hay 1479 que no tienen valor en este atributo
+          - UcdpAgr: acuerdos que incluyen Ucdp program, vacíos 1230.
+          - Part: partes que directamente firman los acuerdos, 17 vacíos. Algunos acuerdos no son firmados.
+          - ThrdPart: acuerdos donde participan terceros, con 887 vacíos. Muchos acuerdos no participan terceras partes.
+          - CowWar: número de guerra, 443 vacíos ya que en muchos de los acuerdos que derivan de procesos de guerra no está registrado.
+          - OthAgr: 872, existen muchos acuerdos en categoría otros
+          - UcdpCon(29 vacíos), Loc1ISO(38 vacíos), Loc1GWNO(14 vacíos), StageSub (23 vacíos).
+    
+  -   Existen valores de atributos en algunos acuerdos que sobrepasan el valor medio:
+          - Países que superan la media del número de acuerdos:
+            Bosnia and Herzegovina/Yugoslavia (former)-> frecuencia =	133			
+            Colombia-> frecuencia =	128			
+            Philippines/Mindanao-> frecuencia =	126   
+          - Tipo de conflicto:
+            Other-> frecuencia = 1
+          - Etapa:
+            Other-> frecuencia = 1
+          - Subetapa:
+            Reoth-> frecuencia = 1
+          - Acuerdos que superan 200 páginas-> frecuencia = 3
+
+3. Distribución por atributos a nivel general:
+    - Con-> los paises con más acuerdos son Bosnia, Colombia y Filipinas, todos ellos con conflictos Intra e InterIntra, es decir 
+      priman los conflictos internos. 
+    - Reg-> la región con más acuerdos es Africa.
+    - Contp-> el tipo de conflicto más abundante es el relacionado con asunto de gobierno y territorio.
+    - Status-> el valor con mayor frecuencia es Multiparty signed/agreed con mucha diferencia ya que supone 92% del total.   
+    - Stage-> los acuerdos con mayor frecuencia son los que están en pre-negociación y los que menos los que se renuevan.
+    - StageSub-> el valor con más frecuencia es MultIss, acuerdos con multiples temas pendientes.
+    - Agtp-> la naturaleza del conflicto que origina el acuerdo con mayor frecuencia es la interna, Intra, que se produce dentro 
+      del estado.
+    - Dat-> mayor volumen de acuerdos se dio entre 1993-1994.
+      
+4. Relaciones entre variables a nivel general:
+   Extraídos de los gráficos de relación:
+   Por grupos sociales en regiones:
+   Infancia: 
+    - La mayor parte de los acuerdos no consideran disposiciones específicas de la infancia. Para los acuerdos que
+    incluyen algún tipo de referencia a esta, la región que más lo contempla es Africa si bien es cierto también es la
+    región que más acuerdos tiene. 
+    - Por estado los acuerdos que consideran referencias a la infancia son aquellos en los que participan varias partes
+    en el acuerdo.
+    - la etapa en la que se encuentran los acuerdos con referencias a la infancia, el mayor volumen de estos, están en etapa
+    'SubPar', no resueltos todos los temas del conflicto pero sí tenidos en cuenta para futuros acuerdos. 
+    - Existe mayor volumen de acuerdos que consideran referencias a la infancia que a su vez incluyen referencias al desarrollo.
+    - Por tipo de conflicto el mayor volumen de acuerdos que consideran medidas de infancia son los internos dentro de un mismo
+    estado.
+    - Para aquellos acuerdos que consideran referencias a la infancia también incluyen referencias a la mujer, ambas variables
+    están relacionadas.
+    Mujer:
+    - La region que tiene más acuerdos con referencias a la mujer es Africa, después Asia y la que menos Cross-regional.
+    - Por estado los acuerdos que consideran referencias a la mujer son aquellos en los que participan varias partes en el
+    acuerdo.
+    - En cuanto a la etapa en la que se encuentran los acuerdos con referencias a la infancia, el mayor volumen están en etapa
+    'SubPar', no resueltos todos los temas del conflicto pero sí tenidos en cuenta para futuros acuerdos. 
+    - Se aprecia que existe volumen de acuerdos que consideran referencias a la mujer que a su vez incluyen referencias al
+    desarrollo.
+    - Los tipos de conflicto que incluyen a la mujer son Intra, dentro del estado.
+    - Para los acuerdos que contemplan derechos humanos también incluyen referencias a las mujeres.
+    - Cuando se incluyen nuevas instituciones en los acuerdos van en línea con la inclusión de referencias a la mujer.
+    
+    Extraídos de la matriz de correlación con un subconjunto de atributos, se puede apreciar que existe relación entre las siguientes variables:
+    Se aprecia que los % más elevados de correlación se dan entre:
+     - Derecho a la educación y a la sanidad.
+     - Derecho a la educación y trabajo. 
+     - Derecho a la vida y al trabajo, sanidad y educación.
+     - Derecho a la seguridad y a la educación, sanidad y trabajo.
+     - Derecho a la libertad y a la vida.
+     - Mujer e infancia.
+     - Poder compartido y reformas constitucionales.
+     - Infancia y derecho a la vida, a la educación, a la libertad.
+     - Mujer y reformas constitucionales, derecho a la libertad, educación.
+    
+    Extraídos del análisis de componentes prinicpales:
+    - PC1, se aprecia que la variables principales son SerHeal, SerEdu, SerWork, CprLife, CprLib, SerSs y CprVote,
+    es decir derechos relacionados con educación, trabajo, sanidad, vida, voto, libertad y seguridad.
+    - PC2, las variables son SerSs, SerHeal, SerEdu, SerWork, GeWom, Polps, PolNewInd y Dev, aquí ya se incluyen variables de política y económicas.
+    - PC3 se observa que destacan Polps, Cons, PolNewInd, GCh, TjVic y GeWom, variables políticas y de justicia con mujer e infancia.
+
+
+5. Por último en la representación geográfica con los mapas se visualiza la distribución para alguna variables generales como tipo de conflicto, estado, etapa. También para las variables objetivo: infancia y mujer. Y algunas variables de detalle: reparto de poder, desarrollo, igualdad de género.
+Se aprecia la distribución por países de los acuerdos en base a estas categorías y sus valores.
+
+      
+### Análisis de los resultados y conclusiones de detalle en PEC3.
+
+Si filtramos el dataset contemplando solo aquellos acuerdos que incluyen mujer e infancia y su relación con el resto de variables exploradas en base a la hipótesis planteada podemos desglosar relaciones positivas para estos acuerdos con los siguientes atributos desglosados por ámbitos:
+
+1. Político:
+   - Nuevas instituciones
+   - Reparto de poder
+   - Democracia
+   - Constitución
+
+2. Económico:
+   - Desarrollo
+   - Plan económico nacional
+   - Reparto de la propiedad
+
+3. Derechos:
+   - Igualdad de género
+   - Derechos humanos
+   - Derecho a la vida
+   - Derecho al voto
+   - Derecho a la igualdad
+   - Derecho a la libertad
+   - Esclavitud
+   - Derecho al trabajo
+   - Derecho a la educación
+   - Derecho a la seguridad
+   - Derecho a la salud
+
+4. Social:
+   - Familia
+   - Clase social
+
+5. Justicia:
+   - Derechos ciudadanos
+   - Reformas de justicia
+   - Justicia a víctimas
+
+6. Seguridad:
+   - Protección a grupos
+   - Protección derechos
+
+      
